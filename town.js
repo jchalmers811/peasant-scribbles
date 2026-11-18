@@ -1,5 +1,5 @@
 'use strict';
-/* Text-to-Town: deterministic medieval town generator.
+/* Peasant Scribbles: deterministic medieval town generator.
  * generateTown(text) -> model; renderTown(ctx, model) draws it in a 1200x1200 world. */
 
 const TAU = Math.PI * 2;
