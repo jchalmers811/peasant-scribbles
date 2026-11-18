@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Text to Town</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="layout">
+    <section class="panel">
+      <header>
+        <h1>Text&nbsp;to&nbsp;Town</h1>
+        <p class="lede">Write anything. Every word becomes a building, every sentence a road, and certain words summon rivers, castles, cathedrals and walls.</p>
+      </header>
+
+      <label for="text" class="sr-only">Your text</label>
+      <textarea id="text" spellcheck="false" placeholder="Once upon a time, by a cold river…"></textarea>
+
+      <div class="row">
+        <button id="download" title="Save the map as a PNG">Save map</button>
+      </div>
+
+      <div class="samples">
+        <span>Or try:</span>
+        <button data-sample="tale">A fairy tale</button>
+        <button data-sample="shanty">A sea shanty</button>
+        <button data-sample="war">A war chronicle</button>
+        <button data-sample="list">A shopping list</button>
+      </div>
+
+      <article id="chronicle" class="chronicle" aria-live="polite"></article>
+    </section>
+
+    <section class="map-wrap">
+      <canvas id="map" aria-label="Map of the generated town"></canvas>
+      <div id="tooltip" class="tooltip" hidden></div>
+    </section>
+  </main>
+
+  <script src="town.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
