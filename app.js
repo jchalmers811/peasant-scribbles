@@ -1,5 +1,7 @@
 'use strict';
-/* UI glue: textarea -> generateTown -> canvas, plus hover tooltips and PNG export. */
+/* Page glue: textarea -> generateTown -> the chosen map style -> canvas.
+ * Also the style switcher, hover tooltips and PNG export. Knows nothing about
+ * how any style draws; see styles/registry.js for the style contract. */
 
 const SAMPLES = {
   tale: `Once upon a time a young princess lived in a castle beside a cold river. Every night she climbed the tower and watched the boats drift toward the sea. The king feared a dragon in the dark forest, so his knights guarded the gate. One morning the miller's son brought bread and a song, and the whole town gathered in the market to dance.`,
@@ -10,12 +12,14 @@ const SAMPLES = {
 
 const WORLD_SIZE = 1200;
 const RENDER_SCALE = 2;
+const STORE = { text: 'text-to-town:text', style: 'text-to-town:style' };
 
 const textEl = document.getElementById('text');
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 const tooltip = document.getElementById('tooltip');
 const chronicle = document.getElementById('chronicle');
+const modeButtons = document.getElementById('modes');
 
 const offscreen = document.createElement('canvas');
 offscreen.width = offscreen.height = WORLD_SIZE * RENDER_SCALE;
@@ -23,27 +27,44 @@ const offCtx = offscreen.getContext('2d');
 
 let model = null;
 let hovered = null;
+let style = getStyle(load(STORE.style));
+let paintToken = 0;
+
+function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function save(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* storage unavailable */ } }
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ---------- building & painting ----------
 function build() {
   model = generateTown(textEl.value);
+  writeChronicle();
+  save(STORE.text, textEl.value);
+  paint();
+}
+
+// render the current model with the current style (after its fonts load)
+async function paint() {
+  const token = ++paintToken;
+  if (document.fonts && style.fonts) {
+    await Promise.all(style.fonts.map(f => document.fonts.load(f).catch(() => {})));
+  }
+  if (token !== paintToken || !model) return; // a newer paint superseded this one
+  offCtx.setTransform(1, 0, 0, 1, 0, 0);
+  offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
   offCtx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
-  renderTown(offCtx, model);
+  style.render(offCtx, model);
   hovered = null;
   tooltip.hidden = true;
   sizeCanvas();
-  writeChronicle();
-  try { localStorage.setItem('text-to-town:text', textEl.value); } catch (e) { /* storage unavailable */ }
 }
 
 function sizeCanvas() {
   const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const px = Math.round(rect.width * dpr);
-  if (canvas.width !== px) canvas.width = canvas.height = px;
+  const px = Math.round(rect.width * (window.devicePixelRatio || 1));
+  if (px && canvas.width !== px) canvas.width = canvas.height = px;
   draw();
 }
 
@@ -51,20 +72,33 @@ function draw() {
   if (!model) return;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height);
-  if (!hovered) return;
+  if (!hovered || !style.highlight) return;
   const s = canvas.width / WORLD_SIZE;
   ctx.setTransform(s, 0, 0, s, 0, 0);
   for (const h of model.houses) {
-    if (h.word !== hovered.word) continue;
-    ctx.save();
-    ctx.translate(h.x, h.y); ctx.rotate(h.a);
-    ctx.strokeStyle = h === hovered ? '#fff6c8' : '#f0c75e';
-    ctx.lineWidth = h === hovered ? 3 : 2;
-    ctx.strokeRect(-h.w / 2 - 2, -h.h / 2 - 2, h.w + 4, h.h + 4);
-    ctx.restore();
+    if (h.word === hovered.word) style.highlight(ctx, model, h, h === hovered);
   }
 }
 
+// ---------- style switcher ----------
+function setStyle(id) {
+  style = getStyle(id);
+  save(STORE.style, style.id);
+  document.body.dataset.mode = style.id;
+  for (const b of modeButtons.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.style === style.id));
+  paint();
+}
+
+for (const s of TownStyles) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.style = s.id;
+  b.textContent = s.label;
+  b.addEventListener('click', () => setStyle(s.id));
+  modeButtons.appendChild(b);
+}
+
+// ---------- chronicle ----------
 function writeChronicle() {
   const m = model, p = m.parsed;
   if (!p.content.length) {
@@ -89,12 +123,13 @@ function writeChronicle() {
     <p class="hint">Hover any building to see the word that built it.</p>`;
 }
 
+// ---------- interaction ----------
 canvas.addEventListener('mousemove', e => {
   if (!model) return;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / rect.width * WORLD_SIZE;
   const y = (e.clientY - rect.top) / rect.height * WORLD_SIZE;
-  const h = houseAt(model, x, y);
+  const h = (style.pick || houseAt)(model, x, y);
   if (h !== hovered) { hovered = h; draw(); }
   if (h) {
     const wrap = canvas.parentElement.getBoundingClientRect();
@@ -122,15 +157,12 @@ document.querySelectorAll('[data-sample]').forEach(btn => btn.addEventListener('
 document.getElementById('download').addEventListener('click', () => {
   if (!model) return;
   const a = document.createElement('a');
-  a.download = `${model.name.toLowerCase()}.png`;
+  a.download = `${model.name.toLowerCase()}-${style.id}.png`;
   a.href = offscreen.toDataURL('image/png');
   a.click();
 });
 window.addEventListener('resize', sizeCanvas);
 
-let saved = null;
-try { saved = localStorage.getItem('text-to-town:text'); } catch (e) { /* storage unavailable */ }
-textEl.value = saved || SAMPLES.tale;
-
-// wait for the map font so the first render uses it
-(document.fonts ? document.fonts.load('46px "IM Fell English"').catch(() => {}) : Promise.resolve()).then(build);
+textEl.value = load(STORE.text) || SAMPLES.tale;
+setStyle(style.id);
+build();

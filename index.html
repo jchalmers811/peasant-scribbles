@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B0%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Cinzel:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -23,6 +23,10 @@
       <textarea id="text" spellcheck="false" placeholder="Once upon a time, by a cold river…"></textarea>
 
       <div class="row">
+        <div class="modes" role="group" aria-label="Map style">
+          <span>Style:</span>
+          <div id="modes" class="mode-buttons"></div>
+        </div>
         <button id="download" title="Save the map as a PNG">Save map</button>
       </div>
 
@@ -44,6 +48,11 @@
   </main>
 
   <script src="town.js"></script>
+  <script src="styles/registry.js"></script>
+  <script src="styles/parchment.js"></script>
+  <script src="styles/raised.js"></script>
+  <script src="styles/adventure.js"></script>
+  <script src="styles/bruegel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

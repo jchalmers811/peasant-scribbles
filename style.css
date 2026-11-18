@@ -66,7 +66,16 @@ textarea {
 }
 textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.row { display: flex; gap: 8px; }
+.row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+.modes { display: flex; align-items: center; gap: 8px; font-style: italic; color: var(--ink-soft); }
+.mode-buttons { display: inline-flex; border: 1px solid var(--ink-soft); border-radius: 3px; overflow: hidden; }
+.mode-buttons button { border: 0; border-radius: 0; padding: 6px 12px; }
+.mode-buttons button + button { border-left: 1px solid var(--ink-soft); }
+.mode-buttons button[aria-pressed="true"] { background: var(--accent); color: #fbf5e4; }
+
+body[data-mode="adventure"] { background: #1c2414; }
+body[data-mode="bruegel"] { background: #1e1812; }
 
 button {
   font: inherit;
