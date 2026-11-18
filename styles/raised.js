@@ -3,10 +3,20 @@
  * blocks seen from a high three-quarter view (Adventure, Bruegel, ...).
  *
  * Nothing here has colours of its own: every function takes a palette `pal`
- * (see Raised.basePalette for the keys), so each style keeps its own look. */
+ * (see Raised.basePalette for the keys), so each style keeps its own look.
+ *
+ * Camera: by default the ground is drawn as-is (top-down) and heights rise
+ * straight up the screen. A palette may also set
+ *   project(x, y) -> {x, y}   map a ground point to the screen (e.g. isometric)
+ *   projectVec(x, y) -> {x, y} the same mapping for directions (no offset)
+ *   zoom                       scale for heights and other screen sizes
+ * All positions passed in stay in ground (world) coordinates either way. */
 const Raised = (() => {
 const LIGHT = { x: -0.6, y: -0.8 }; // light comes from the upper left
 const TAU = Math.PI * 2;
+// a ground point on screen under this palette's camera
+const scr = (pal, p) => (pal.project ? pal.project(p.x, p.y) : p);
+const zoomOf = pal => pal.zoom || 1;
 
 const basePalette = {
   outline: '#1d140b', lineWidth: 0.9,
@@ -64,8 +74,10 @@ function convexHull(points) {
 function block(ctx, pal, x, y, w, h, a, H, roofH, wallCol, roofCol, opts = {}) {
   const OUT = pal.outline, LW = pal.lineWidth;
   if (h > w) { [w, h] = [h, w]; a += Math.PI / 2; }
-  const c = Math.cos(a), s = Math.sin(a);
-  const P = (u, v, z) => ({ x: x + u * c - v * s, y: y + u * s + v * c - z });
+  const c = Math.cos(a), s = Math.sin(a), proj = pal.project;
+  const P = proj
+    ? (u, v, z) => { const q = proj(x + u * c - v * s, y + u * s + v * c); return { x: q.x, y: q.y - z }; }
+    : (u, v, z) => ({ x: x + u * c - v * s, y: y + u * s + v * c - z });
   const hw = w / 2, hh = h / 2;
   const base = [P(-hw, -hh, 0), P(hw, -hh, 0), P(hw, hh, 0), P(-hw, hh, 0)];
 
@@ -141,7 +153,11 @@ function block(ctx, pal, x, y, w, h, a, H, roofH, wallCol, roofCol, opts = {}) {
     { pts: [T[2], T[3], R1, R2], n: [0, 1] },
     { pts: [T[3], T[0], R1], n: [-1, 0] },
   ].map(f => {
-    const nx = f.n[0] * c - f.n[1] * s, ny = f.n[0] * s + f.n[1] * c;
+    let nx = f.n[0] * c - f.n[1] * s, ny = f.n[0] * s + f.n[1] * c;
+    if (pal.projectVec) { // face direction as seen on screen
+      const q = pal.projectVec(nx, ny), L = Math.hypot(q.x, q.y) || 1;
+      nx = q.x / L; ny = q.y / L;
+    }
     return { ...f, nx, ny };
   }).sort((f, g) => f.ny - g.ny);
   for (const f of faces) {
@@ -172,6 +188,7 @@ function block(ctx, pal, x, y, w, h, a, H, roofH, wallCol, roofCol, opts = {}) {
 
 // a round tower with a conical roof; (x, y) is the base centre
 function tower(ctx, pal, x, y, r, H, roofCol, opts = {}) {
+  if (pal.project) ({ x, y } = pal.project(x, y));
   const OUT = pal.outline;
   const ry = r * 0.45;
   ctx.fillStyle = pal.shadow;
@@ -220,7 +237,8 @@ function flag(ctx, pal, x, y, color) {
 
 // ---------- town structures ----------
 function wallSegment(ctx, pal, a, b) {
-  const WALL_H = pal.wallH, OUT = pal.outline;
+  a = scr(pal, a); b = scr(pal, b);
+  const WALL_H = pal.wallH * zoomOf(pal), OUT = pal.outline;
   const ex = b.x - a.x, ey = b.y - a.y, L = Math.hypot(ex, ey) || 1;
   const nx = ey / L;
   const quad = [a, b, { x: b.x, y: b.y - WALL_H }, { x: a.x, y: a.y - WALL_H }];
@@ -242,57 +260,64 @@ function wallSegment(ctx, pal, a, b) {
 }
 
 function gate(ctx, pal, g) {
+  const Z = zoomOf(pal);
   const px = -Math.sin(g.a), py = Math.cos(g.a), s = g.w / 2 + 8;
-  const towers = [{ x: g.x + px * s, y: g.y + py * s }, { x: g.x - px * s, y: g.y - py * s }].sort((a, b) => a.y - b.y);
-  tower(ctx, pal, towers[0].x, towers[0].y, 7.5, 26, pal.gateTowerRoof);
-  block(ctx, pal, g.x, g.y, 12, g.w + 10, g.a, 20, 0, pal.gateStone, null, { door: false });
+  const towers = [{ x: g.x + px * s, y: g.y + py * s }, { x: g.x - px * s, y: g.y - py * s }].sort((a, b) => scr(pal, a).y - scr(pal, b).y);
+  tower(ctx, pal, towers[0].x, towers[0].y, 7.5 * Z, 26 * Z, pal.gateTowerRoof);
+  block(ctx, pal, g.x, g.y, 12, g.w + 10, g.a, 20 * Z, 0, pal.gateStone, null, { door: false });
+  const q = scr(pal, g), aw = g.w * 0.35 * Z;
   ctx.fillStyle = pal.gateDark;
-  ctx.beginPath(); ctx.ellipse(g.x, g.y - 2, g.w * 0.35, 9, 0, Math.PI, 0); ctx.lineTo(g.x + g.w * .35, g.y + 1); ctx.lineTo(g.x - g.w * .35, g.y + 1); ctx.closePath(); ctx.fill();
-  tower(ctx, pal, towers[1].x, towers[1].y, 7.5, 26, pal.gateTowerRoof);
+  ctx.beginPath(); ctx.ellipse(q.x, q.y - 2, aw, 9 * Z, 0, Math.PI, 0); ctx.lineTo(q.x + aw, q.y + 1); ctx.lineTo(q.x - aw, q.y + 1); ctx.closePath(); ctx.fill();
+  tower(ctx, pal, towers[1].x, towers[1].y, 7.5 * Z, 26 * Z, pal.gateTowerRoof);
 }
 
 function castle(ctx, pal, sp) {
+  const Z = zoomOf(pal);
   const c = Math.cos(sp.a), s = Math.sin(sp.a), half = 46;
   const P = (u, v) => ({ x: sp.x + u * c - v * s, y: sp.y + u * s + v * c });
   const corners = [P(-half, -half), P(half, -half), P(half, half), P(-half, half)];
-  fillPoly(ctx, corners, pal.castleYard, pal.outline, 1); // courtyard
+  fillPoly(ctx, corners.map(p => scr(pal, p)), pal.castleYard, pal.outline, 1); // courtyard
   const parts = [];
+  const at = p => scr(pal, p).y; // sort key: screen depth
   for (let i = 0; i < 4; i++) {
     const a = corners[i], b = corners[(i + 1) % 4];
-    parts.push({ y: (a.y + b.y) / 2 - 1, draw: () => wallSegment(ctx, pal, a, b) });
-    parts.push({ y: a.y + 1, draw: () => tower(ctx, pal, a.x, a.y, 12, 36, pal.castleTowerRoof, { flag: pal.castleFlag }) });
+    parts.push({ y: (at(a) + at(b)) / 2 - 1, draw: () => wallSegment(ctx, pal, a, b) });
+    parts.push({ y: at(a) + 1, draw: () => tower(ctx, pal, a.x, a.y, 12 * Z, 36 * Z, pal.castleTowerRoof, { flag: pal.castleFlag }) });
   }
   const keep = P(10, -6), hall = P(-20, 22), gateP = P(-half, 0);
-  parts.push({ y: keep.y, draw: () => {
-    block(ctx, pal, keep.x, keep.y, 38, 38, sp.a, 42, 0, pal.keep, null, { door: true });
-    flag(ctx, pal, keep.x, keep.y - 46, pal.keepFlag);
+  parts.push({ y: at(keep), draw: () => {
+    block(ctx, pal, keep.x, keep.y, 38, 38, sp.a, 42 * Z, 0, pal.keep, null, { door: true });
+    const k = scr(pal, keep);
+    flag(ctx, pal, k.x, k.y - 46 * Z, pal.keepFlag);
   } });
-  parts.push({ y: hall.y, draw: () => block(ctx, pal, hall.x, hall.y, 30, 14, sp.a, 14, 9, pal.hallWall, pal.hallRoof, {}) });
-  parts.push({ y: gateP.y + 2, draw: () => block(ctx, pal, gateP.x, gateP.y, 14, 22, sp.a, 24, 0, pal.gateStone, null, {}) });
+  parts.push({ y: at(hall), draw: () => block(ctx, pal, hall.x, hall.y, 30, 14, sp.a, 14 * Z, 9 * Z, pal.hallWall, pal.hallRoof, {}) });
+  parts.push({ y: at(gateP) + 2, draw: () => block(ctx, pal, gateP.x, gateP.y, 14, 22, sp.a, 24 * Z, 0, pal.gateStone, null, {}) });
   parts.sort((a, b) => a.y - b.y).forEach(p => p.draw());
 }
 
 function cathedral(ctx, pal, sp) {
-  const k = sp.k || 1, c = Math.cos(sp.a), s = Math.sin(sp.a);
+  const k = sp.k || 1, c = Math.cos(sp.a), s = Math.sin(sp.a), kz = k * zoomOf(pal);
   const P = (u, v) => ({ x: sp.x + (u * c - v * s) * k, y: sp.y + (u * s + v * c) * k });
   const stone = pal.churchStone, slate = pal.churchRoof;
   const parts = [
-    { at: P(2, 0), draw: q => block(ctx, pal, q.x, q.y, 74 * k, 22 * k, sp.a, 22 * k, 13 * k, stone, slate, {}) },
-    { at: P(14, 0), draw: q => block(ctx, pal, q.x, q.y, 50 * k, 20 * k, sp.a + Math.PI / 2, 22 * k, 12 * k, stone, slate, { door: false, noShadow: true }) },
-    { at: P(42, 0), draw: q => block(ctx, pal, q.x, q.y, 14 * k, 18 * k, sp.a, 18 * k, 9 * k, stone, slate, { door: false }) },
-    { at: P(-41, 0), draw: q => block(ctx, pal, q.x, q.y, 18 * k, 18 * k, sp.a, 52 * k, 26 * k, pal.churchTower, slate, {}) },
+    { at: P(2, 0), draw: q => block(ctx, pal, q.x, q.y, 74 * k, 22 * k, sp.a, 22 * kz, 13 * kz, stone, slate, {}) },
+    { at: P(14, 0), draw: q => block(ctx, pal, q.x, q.y, 50 * k, 20 * k, sp.a + Math.PI / 2, 22 * kz, 12 * kz, stone, slate, { door: false, noShadow: true }) },
+    { at: P(42, 0), draw: q => block(ctx, pal, q.x, q.y, 14 * k, 18 * k, sp.a, 18 * kz, 9 * kz, stone, slate, { door: false }) },
+    { at: P(-41, 0), draw: q => block(ctx, pal, q.x, q.y, 18 * k, 18 * k, sp.a, 52 * kz, 26 * kz, pal.churchTower, slate, {}) },
   ];
-  parts.sort((a, b) => a.at.y - b.at.y).forEach(p => p.draw(p.at));
+  parts.sort((a, b) => scr(pal, a.at).y - scr(pal, b.at).y).forEach(p => p.draw(p.at));
   // cross on the spire
-  const t = P(-41, 0), top = t.y - (52 + 26) * k;
+  const t = scr(pal, P(-41, 0)), top = t.y - (52 + 26) * kz;
   ctx.strokeStyle = pal.cross; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(t.x, top); ctx.lineTo(t.x, top - 8); ctx.moveTo(t.x - 3, top - 5.5); ctx.lineTo(t.x + 3, top - 5.5); ctx.stroke();
 }
 
 function mill(ctx, pal, sp) {
-  tower(ctx, pal, sp.x, sp.y, 9, 26, pal.millRoof);
-  const hx = sp.x, hy = sp.y - 22;
-  ctx.save(); ctx.translate(hx, hy + 4); ctx.rotate(sp.sail);
+  const Z = zoomOf(pal);
+  tower(ctx, pal, sp.x, sp.y, 9 * Z, 26 * Z, pal.millRoof);
+  const q = scr(pal, sp), hx = q.x, hy = q.y - 22 * Z;
+  ctx.save(); ctx.translate(hx, hy + 4 * Z); ctx.rotate(sp.sail);
+  if (Z !== 1) ctx.scale(Z, Z);
   for (let i = 0; i < 4; i++) {
     ctx.rotate(Math.PI / 2);
     ctx.fillStyle = pal.millSail; ctx.strokeStyle = pal.outline; ctx.lineWidth = .9;
@@ -312,7 +337,7 @@ function highlightHouse(ctx, pal, h, dims, isPrimary) {
   ctx.strokeStyle = isPrimary ? pal.highlight[0] : pal.highlight[1];
   ctx.lineWidth = isPrimary ? 2.5 : 1.8;
   const c = Math.cos(h.a), s = Math.sin(h.a), hw = h.w / 2 + 2, hh = h.h / 2 + 2;
-  const P = (u, v, z) => ({ x: h.x + u * c - v * s, y: h.y + u * s + v * c - z });
+  const P = (u, v, z) => { const q = scr(pal, { x: h.x + u * c - v * s, y: h.y + u * s + v * c }); return { x: q.x, y: q.y - z }; };
   const z = H + roofH * .5;
   const hull = convexHull([P(-hw, -hh, 0), P(hw, -hh, 0), P(hw, hh, 0), P(-hw, hh, 0), P(-hw, -hh, z), P(hw, -hh, z), P(hw, hh, z), P(-hw, hh, z)]);
   ctx.beginPath();

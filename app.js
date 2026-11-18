@@ -13,6 +13,7 @@ const SAMPLES = {
 const WORLD_SIZE = 1200;
 const RENDER_SCALE = 2;
 const STORE = { text: 'text-to-town:text', style: 'text-to-town:style' };
+const DEFAULT_STYLE = 'conquest'; // for visitors who haven't picked a style yet
 
 const textEl = document.getElementById('text');
 const canvas = document.getElementById('map');
@@ -27,7 +28,7 @@ const offCtx = offscreen.getContext('2d');
 
 let model = null;
 let hovered = null;
-let style = getStyle(load(STORE.style));
+let style = getStyle(load(STORE.style) || DEFAULT_STYLE);
 let paintToken = 0;
 
 function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }

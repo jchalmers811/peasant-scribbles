@@ -76,6 +76,7 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 body[data-mode="adventure"] { background: #1c2414; }
 body[data-mode="bruegel"] { background: #1e1812; }
+body[data-mode="conquest"] { background: #15191d; }
 
 button {
   font: inherit;
