@@ -127,6 +127,66 @@ canvas {
 }
 .tooltip small { color: #cdb98f; font-style: italic; }
 
+.actions { display: flex; gap: 8px; }
+
+/* Random fruit button: a rainbow border that spins and a glow that pulses. */
+@property --fruit-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+#random-fruit {
+  position: relative;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    conic-gradient(from var(--fruit-angle), #ff3b3b, #ff9f1a, #ffe11a, #3bd16f, #1ab6ff, #7a5cff, #ff3bd4, #ff3b3b) border-box;
+  font-weight: bold;
+  color: var(--accent);
+  animation: fruit-spin 3s linear infinite, fruit-glow 1.6s ease-in-out infinite;
+}
+#random-fruit:hover {
+  background:
+    linear-gradient(#fbf5e4, #fbf5e4) padding-box,
+    conic-gradient(from var(--fruit-angle), #ff3b3b, #ff9f1a, #ffe11a, #3bd16f, #1ab6ff, #7a5cff, #ff3bd4, #ff3b3b) border-box;
+  animation-duration: 1.2s, 1.6s;
+}
+@keyframes fruit-spin { to { --fruit-angle: 360deg; } }
+@keyframes fruit-glow {
+  0%, 100% { box-shadow: 0 0 4px 0 rgba(255,120,60,.35); }
+  25% { box-shadow: 0 0 12px 2px rgba(255,225,26,.6); }
+  50% { box-shadow: 0 0 12px 2px rgba(59,209,111,.6); }
+  75% { box-shadow: 0 0 12px 2px rgba(122,92,255,.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #random-fruit { animation: none; }
+}
+
+/* Peelable fruit: a transparent layer over the whole page. The canvas ignores the
+ * mouse (fruit.js claims presses that land on the fruit), so the app stays usable. */
+.fruit-layer { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+.fruit-layer[hidden] { display: none; }
+.fruit-layer canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  max-width: none; aspect-ratio: auto; border-radius: 0;
+  box-shadow: none; background: transparent; cursor: inherit;
+}
+.fruit-caption {
+  position: absolute; left: 50%; top: calc(50% + min(185px, 32vmin));
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  text-align: center; color: #fbf5e4; pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 12px rgba(0,0,0,.6);
+}
+.fruit-caption strong { font-family: "IM Fell English SC", serif; font-weight: normal; font-size: 1.4rem; }
+.fruit-caption span { font-style: italic; font-size: .95rem; }
+.fruit-buttons { display: flex; gap: 6px; pointer-events: auto; }
+.fruit-buttons button {
+  font-size: .9rem; padding: 3px 10px; color: #fbf5e4;
+  border-color: rgba(251,245,228,.7); text-shadow: inherit;
+}
+.fruit-buttons button:hover { background: rgba(251,245,228,.12); }
+body.fruit-dragging { user-select: none; }
+html[data-fruit-cursor="grab"] * { cursor: grab !important; }
+html[data-fruit-cursor="grabbing"] * { cursor: grabbing !important; }
+html[data-fruit-cursor="move"] * { cursor: move !important; }
+
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 @media (max-width: 860px) {
