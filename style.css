@@ -185,7 +185,6 @@ canvas {
 body.fruit-dragging { user-select: none; }
 html[data-fruit-cursor="grab"] * { cursor: grab !important; }
 html[data-fruit-cursor="grabbing"] * { cursor: grabbing !important; }
-html[data-fruit-cursor="move"] * { cursor: move !important; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 

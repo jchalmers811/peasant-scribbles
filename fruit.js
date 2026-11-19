@@ -408,7 +408,7 @@
     obj.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: inner, roughness: 0.9, side: THREE.BackSide })));
     obj.visible = false;
     fruit.group.add(obj);
-    return { obj, geom: g, samples: [], length: 0 };
+    return { obj, geom: g, samples: [], length: 0, tearAt: 0.8 + Math.random() * 0.9 };
   }
 
   function addSample(strip, p, n) {
@@ -468,12 +468,12 @@
   }
 
   // ---------- pointer handling ----------
-  let mode = null;          // 'peel' | 'rotate' | null
+  const SPIN_SPEED = 0.45;  // radians per second, always
+  let mode = null;          // 'peel' while the button is held, else null
   let strip = null;
   let lastHit = null;       // last local point on the skin
   let idleTravel = 0;       // distance dragged without removing any skin
   let lastPointer = null;
-  let hovering = false;     // pointer over the fruit: hold still so it can be aimed at
   const ndc = { x: 0, y: 0 };
 
   function hitFruit(e) {
@@ -483,10 +483,7 @@
     app.raycaster.setFromCamera(ndc, app.camera);
     const hit = app.raycaster.intersectObject(fruit.peel, false)[0];
     if (!hit) return null;
-    const alpha = fruit.peel.geometry.attributes.color.array;
-    const f = hit.face;
-    const skin = Math.max(alpha[f.a * 4 + 3], alpha[f.b * 4 + 3], alpha[f.c * 4 + 3]) >= 0.5;
-    return { p: fruit.peel.worldToLocal(hit.point.clone()), n: f.normal.clone(), skin };
+    return { p: fruit.peel.worldToLocal(hit.point.clone()), n: hit.face.normal.clone() };
   }
 
   function peelTo(hit) {
@@ -505,7 +502,7 @@
       if (!strip) strip = newStrip();
       const last = strip.samples[strip.samples.length - 1];
       if (!last || last.p.distanceTo(hit.p) > brush * 0.3) addSample(strip, hit.p, hit.n);
-      if (strip.length > 1.6 || strip.samples.length >= MAX_SAMPLES) {
+      if (strip.length > strip.tearAt || strip.samples.length >= MAX_SAMPLES) {
         dropStrip(strip);           // long strips tear off on their own
         strip = newStrip();
         addSample(strip, hit.p, hit.n);
@@ -529,37 +526,28 @@
       e.stopPropagation();
       lastPointer = { x: e.clientX, y: e.clientY };
       document.body.classList.add('fruit-dragging');
-      if (hit.skin) {
-        mode = 'peel';
-        lastHit = null;
-        idleTravel = 0;
-        peelTo(hit);
-      } else {
-        mode = 'rotate';   // grabbed bare flesh: turn the fruit instead
-      }
-      setCursor(mode === 'peel' ? 'grabbing' : 'move');
+      mode = 'peel';
+      lastHit = null;
+      idleTravel = 0;
+      peelTo(hit);
+      setCursor('grabbing');
     }, true);
     window.addEventListener('pointermove', e => {
       if (!fruit || !running) return;
-      if (mode === 'rotate') {
-        const dx = e.clientX - lastPointer.x, dy = e.clientY - lastPointer.y;
-        const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), dx * 0.01);
-        const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dy * 0.01);
-        fruit.group.quaternion.premultiply(qy).premultiply(qx);
-      } else if (mode === 'peel') {
-        const hit = hitFruit(e);
+      lastPointer = { x: e.clientX, y: e.clientY };
+      const hit = hitFruit(e);
+      if (mode === 'peel') {
         if (hit) peelTo(hit);
         else { dropStrip(strip); strip = null; lastHit = null; }
       } else {
-        const hit = hitFruit(e);
-        hovering = !!hit;
-        setCursor(hit ? (hit.skin ? 'grab' : 'move') : '');
+        setCursor(hit ? 'grab' : '');
       }
-      lastPointer = { x: e.clientX, y: e.clientY };
     }, true);
     const end = () => {
       if (!mode) return;
-      if (mode === 'peel') { dropStrip(strip); strip = null; lastHit = null; }
+      dropStrip(strip);
+      strip = null;
+      lastHit = null;
       mode = null;
       document.body.classList.remove('fruit-dragging');
       setCursor('');
@@ -582,7 +570,7 @@
     } else if (pct > 0) {
       statusEl.textContent = `${pct}% peeled. Keep going.`;
     } else {
-      statusEl.textContent = 'Drag across the skin to peel. Drag bare fruit to turn it.';
+      statusEl.textContent = 'Click and drag across the skin to peel it.';
     }
   }
 
@@ -597,7 +585,14 @@
         const e = fruit.entered, s = 1 + 0.12 * Math.sin(e * Math.PI) - (1 - e) * (1 - e);
         fruit.group.scale.setScalar(Math.max(0.001, s));
       }
-      if (!mode && !hovering) fruit.group.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), dt * 0.25);
+      // The fruit always turns at the same pace. While the button is held, the
+      // skin turning under a still cursor keeps peeling until the strip tears.
+      fruit.group.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), dt * SPIN_SPEED);
+      if (mode === 'peel') {
+        fruit.group.updateMatrixWorld();
+        const hit = hitFruit({ clientX: lastPointer.x, clientY: lastPointer.y });
+        if (hit) peelTo(hit);
+      }
     }
     for (let i = app.falling.length - 1; i >= 0; i--) {
       const f = app.falling[i];
@@ -656,7 +651,6 @@
   function close() {
     layer.hidden = true;
     running = false;
-    hovering = false;
     setCursor('');
   }
 
